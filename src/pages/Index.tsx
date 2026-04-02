@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import jsQR from "jsqr";
 import Icon from "@/components/ui/icon";
 
-type Section = "envelopes" | "tracking" | "analytics" | "history" | "profile" | "support";
+type Section = "envelopes" | "tracking" | "analytics" | "history" | "settings" | "support";
 
 interface EnvelopeData {
   id: string;
@@ -22,56 +22,20 @@ interface EnvelopeData {
   trackingCode: string;
 }
 
-const MOCK_HISTORY: EnvelopeData[] = [
-  {
-    id: "ENV-001",
-    senderName: "Петров Алексей Владимирович",
-    senderAddress: "ул. Ленина, д. 45, офис 312",
-    senderCity: "Москва",
-    senderIndex: "101000",
-    recipientName: "Иванова Марина Сергеевна",
-    recipientAddress: "пр. Невский, д. 78, кв. 15",
-    recipientCity: "Санкт-Петербург",
-    recipientIndex: "190000",
-    weight: "0.5",
-    type: "Деловое письмо",
-    createdAt: "2026-04-01",
-    status: "delivered",
-    trackingCode: "ENV-2026-001-MSK-SPB",
-  },
-  {
-    id: "ENV-002",
-    senderName: "Сидоров Николай Петрович",
-    senderAddress: "ул. Тверская, д. 12",
-    senderCity: "Москва",
-    senderIndex: "125009",
-    recipientName: "Козлов Дмитрий Иванович",
-    recipientAddress: "ул. Красная, д. 3",
-    recipientCity: "Краснодар",
-    recipientIndex: "350000",
-    weight: "1.2",
-    type: "Документы",
-    createdAt: "2026-03-30",
-    status: "transit",
-    trackingCode: "ENV-2026-002-MSK-KRD",
-  },
-  {
-    id: "ENV-003",
-    senderName: "Захарова Ольга Николаевна",
-    senderAddress: "ул. Садовая, д. 22",
-    senderCity: "Новосибирск",
-    senderIndex: "630000",
-    recipientName: "Фролов Андрей Михайлович",
-    recipientAddress: "пр. Ленина, д. 56, оф. 101",
-    recipientCity: "Екатеринбург",
-    recipientIndex: "620000",
-    weight: "0.3",
-    type: "Уведомление",
-    createdAt: "2026-03-28",
-    status: "created",
-    trackingCode: "ENV-2026-003-NSK-EKB",
-  },
-];
+const STORAGE_KEY = "corpmail_envelopes";
+
+function loadEnvelopes(): EnvelopeData[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveEnvelopes(list: EnvelopeData[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   created: { label: "Создан", color: "bg-blue-100 text-blue-700", icon: "FileText" },
@@ -293,13 +257,17 @@ const EnvelopePreview = ({ env }: { env: Partial<EnvelopeData> }) => {
 
 export default function Index() {
   const [active, setActive] = useState<Section>("envelopes");
+  const [orgName, setOrgName] = useState(() => localStorage.getItem("corpmail_org_name") || "");
+  const [orgInn, setOrgInn] = useState(() => localStorage.getItem("corpmail_org_inn") || "");
+  const [orgAddress, setOrgAddress] = useState(() => localStorage.getItem("corpmail_org_address") || "");
+  const [orgPhone, setOrgPhone] = useState(() => localStorage.getItem("corpmail_org_phone") || "");
   const [form, setForm] = useState<Partial<EnvelopeData>>({
     type: "Деловое письмо",
     weight: "0.1",
     createdAt: new Date().toISOString().split("T")[0],
     trackingCode: `ENV-${Date.now().toString().slice(-8)}`,
   });
-  const [saved, setSaved] = useState<EnvelopeData[]>(MOCK_HISTORY);
+  const [saved, setSaved] = useState<EnvelopeData[]>(loadEnvelopes);
   const [toast, setToast] = useState<string | null>(null);
   const [trackingInput, setTrackingInput] = useState("");
   const [trackingResult, setTrackingResult] = useState<EnvelopeData | null>(null);
@@ -312,6 +280,8 @@ export default function Index() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number>(0);
+
+  useEffect(() => { saveEnvelopes(saved); }, [saved]);
 
   const stopScanner = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -543,7 +513,7 @@ export default function Index() {
     { id: "tracking", icon: "MapPin", label: "Отслеживание" },
     { id: "analytics", icon: "BarChart3", label: "Аналитика" },
     { id: "history", icon: "Clock", label: "История" },
-    { id: "profile", icon: "User", label: "Профиль" },
+    { id: "settings", icon: "Settings", label: "Настройки" },
     { id: "support", icon: "LifeBuoy", label: "Поддержка" },
   ];
 
@@ -597,25 +567,7 @@ export default function Index() {
           ))}
         </nav>
 
-        <div
-          className="p-4"
-          style={{ borderTop: "1px solid hsl(218,40%,22%)" }}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-              style={{ background: "hsl(199,80%,48%)" }}
-            >
-              АД
-            </div>
-            <div>
-              <div className="text-xs text-white font-medium">Администратор</div>
-              <div className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
-                admin@corp.ru
-              </div>
-            </div>
-          </div>
-        </div>
+
       </div>
 
       {/* Main content */}
@@ -878,9 +830,7 @@ export default function Index() {
                     Найти
                   </button>
                 </div>
-                <div className="text-xs" style={{ color: "hsl(215,16%,60%)" }}>
-                  Попробуйте: <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: "hsl(218,65%,40%)" }}>ENV-2026-001-MSK-SPB</span>
-                </div>
+
               </div>
 
               {/* QR Scanner */}
@@ -1104,6 +1054,13 @@ export default function Index() {
                     </tr>
                   </thead>
                   <tbody>
+                    {saved.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-12 text-center text-sm" style={{ color: "hsl(215,16%,55%)" }}>
+                          История пуста — создайте первый конверт
+                        </td>
+                      </tr>
+                    )}
                     {saved.map((env, i) => (
                       <tr
                         key={env.id}
@@ -1138,40 +1095,18 @@ export default function Index() {
             </div>
           )}
 
-          {/* === PROFILE === */}
-          {active === "profile" && (
+          {/* === SETTINGS === */}
+          {active === "settings" && (
             <div className="max-w-lg animate-fade-in">
               <h2 className="text-base font-semibold mb-6" style={{ color: "hsl(220,30%,12%)" }}>
-                Профиль организации
+                Настройки организации
               </h2>
               <div className="rounded-sm border p-6 bg-white space-y-4" style={{ borderColor: "hsl(214,20%,85%)" }}>
-                <div className="flex items-center gap-4 pb-4" style={{ borderBottom: "1px solid hsl(214,20%,90%)" }}>
-                  <div
-                    className="w-14 h-14 rounded-sm flex items-center justify-center text-xl font-bold text-white"
-                    style={{ background: "hsl(218,65%,22%)" }}
-                  >
-                    АД
-                  </div>
-                  <div>
-                    <div className="text-base font-semibold" style={{ color: "hsl(220,30%,12%)" }}>
-                      Администратор
-                    </div>
-                    <div className="text-sm" style={{ color: "hsl(215,16%,55%)" }}>
-                      admin@corp.ru
-                    </div>
-                    <div
-                      className="text-xs px-2 py-0.5 rounded-sm inline-block mt-1 font-medium"
-                      style={{ background: "hsl(218,65%,95%)", color: "hsl(218,65%,28%)" }}
-                    >
-                      Суперадминистратор
-                    </div>
-                  </div>
-                </div>
                 {[
-                  { label: "Организация", value: "ООО «КорпПочта»" },
-                  { label: "ИНН", value: "7701234567" },
-                  { label: "Адрес", value: "г. Москва, ул. Деловая, 1" },
-                  { label: "Телефон", value: "+7 (495) 000-00-00" },
+                  { label: "Название организации", value: orgName, set: setOrgName, key: "corpmail_org_name", placeholder: "ООО «Моя Компания»" },
+                  { label: "ИНН", value: orgInn, set: setOrgInn, key: "corpmail_org_inn", placeholder: "7701234567" },
+                  { label: "Юридический адрес", value: orgAddress, set: setOrgAddress, key: "corpmail_org_address", placeholder: "г. Москва, ул. Ленина, д. 1" },
+                  { label: "Телефон", value: orgPhone, set: setOrgPhone, key: "corpmail_org_phone", placeholder: "+7 (000) 000-00-00" },
                 ].map((field) => (
                   <div key={field.label}>
                     <label className="text-xs font-semibold uppercase tracking-widest block mb-1" style={{ color: "hsl(215,16%,47%)" }}>
@@ -1180,17 +1115,47 @@ export default function Index() {
                     <input
                       className="w-full text-sm px-3 py-2 rounded-sm border outline-none"
                       style={{ borderColor: "hsl(214,20%,85%)", color: "hsl(220,30%,12%)" }}
-                      defaultValue={field.value}
+                      placeholder={field.placeholder}
+                      value={field.value}
+                      onChange={(e) => field.set(e.target.value)}
                     />
                   </div>
                 ))}
                 <button
                   className="px-5 py-2.5 rounded-sm text-sm font-semibold text-white"
                   style={{ background: "hsl(218,65%,22%)" }}
-                  onClick={() => showToast("Профиль обновлён")}
+                  onClick={() => {
+                    localStorage.setItem("corpmail_org_name", orgName);
+                    localStorage.setItem("corpmail_org_inn", orgInn);
+                    localStorage.setItem("corpmail_org_address", orgAddress);
+                    localStorage.setItem("corpmail_org_phone", orgPhone);
+                    showToast("Настройки сохранены");
+                  }}
                 >
-                  Сохранить изменения
+                  Сохранить настройки
                 </button>
+              </div>
+
+              <div className="mt-4 rounded-sm border p-5 bg-white space-y-3" style={{ borderColor: "hsl(214,20%,85%)" }}>
+                <div className="text-sm font-semibold" style={{ color: "hsl(220,30%,12%)" }}>Данные системы</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm" style={{ color: "hsl(215,16%,47%)" }}>Всего конвертов в базе</span>
+                  <span className="text-sm font-bold" style={{ color: "hsl(218,65%,28%)" }}>{saved.length}</span>
+                </div>
+                <div className="pt-2" style={{ borderTop: "1px solid hsl(214,20%,90%)" }}>
+                  <button
+                    className="text-xs font-medium px-3 py-1.5 rounded-sm border transition-colors hover:bg-red-50"
+                    style={{ borderColor: "hsl(0,72%,80%)", color: "hsl(0,72%,45%)" }}
+                    onClick={() => {
+                      if (confirm("Удалить все конверты из истории? Это действие необратимо.")) {
+                        setSaved([]);
+                        showToast("История очищена");
+                      }
+                    }}
+                  >
+                    Очистить всю историю
+                  </button>
+                </div>
               </div>
             </div>
           )}
