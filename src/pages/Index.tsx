@@ -389,6 +389,112 @@ export default function Index() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const handlePrint = async (env: Partial<EnvelopeData>) => {
+    const qrData = JSON.stringify({
+      id: env.trackingCode || "—",
+      from: `${env.senderName}, ${env.senderAddress}, ${env.senderCity} ${env.senderIndex}`,
+      to: `${env.recipientName}, ${env.recipientAddress}, ${env.recipientCity} ${env.recipientIndex}`,
+      weight: `${env.weight} кг`,
+      type: env.type,
+      date: env.createdAt,
+    });
+    const qrDataUrl = await QRCode.toDataURL(qrData, {
+      width: 160,
+      margin: 1,
+      color: { dark: "#1a2e5c", light: "#ffffff" },
+    });
+    const date = env.createdAt ? new Date(env.createdAt).toLocaleDateString("ru-RU") : new Date().toLocaleDateString("ru-RU");
+    const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Конверт ${env.trackingCode || ""}</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'IBM Plex Sans', sans-serif; background: #f5f6fa; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .envelope { width: 210mm; background: white; border: 1px solid #c5cfe8; box-shadow: 0 4px 24px rgba(24,48,96,.12); position: relative; overflow: hidden; }
+    .corner { position: absolute; top: 0; right: 0; width: 100px; height: 100px;
+      background: repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(26,46,92,0.05) 8px, rgba(26,46,92,0.05) 10px);
+      clip-path: polygon(100% 0, 0 0, 100% 100%); }
+    .header { background: #1b3468; padding: 10px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .header-logo { display: flex; align-items: center; gap: 8px; color: white; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace; }
+    .header-logo-dot { width: 20px; height: 20px; background: #29afd4; border-radius: 3px; display: flex; align-items: center; justify-content: center; }
+    .header-track { color: rgba(255,255,255,.5); font-size: 10px; font-family: 'IBM Plex Mono', monospace; }
+    .body { padding: 24px; display: grid; grid-template-columns: 1fr auto; gap: 32px; }
+    .addresses { display: flex; flex-direction: column; gap: 0; }
+    .addr-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 6px; }
+    .addr-from .addr-label { color: #2e5aad; }
+    .addr-to .addr-label { color: #1d8eb5; }
+    .addr-name { font-size: 13px; font-weight: 700; color: #111827; }
+    .addr-to .addr-name { font-size: 15px; }
+    .addr-line { font-size: 11px; color: #6b7280; margin-top: 2px; }
+    .divider { border: none; border-top: 1px solid #e5e9f2; margin: 14px 0; }
+    .qr-block { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .qr-block img { width: 120px; height: 120px; border: 1px solid #e5e9f2; padding: 4px; }
+    .qr-hint { font-size: 8px; color: #9ca3af; text-align: center; font-family: 'IBM Plex Mono', monospace; max-width: 120px; line-height: 1.4; }
+    .meta { display: flex; gap: 12px; flex-direction: column; align-items: flex-end; }
+    .badge { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 2px 8px; background: #eef0f6; color: #2e5aad; border-radius: 2px; }
+    .meta-line { font-size: 9px; color: #9ca3af; }
+    .footer { padding: 8px 24px; border-top: 1px dashed #e0e4ef; background: #f9fafb; display: flex; align-items: center; justify-content: space-between; }
+    .footer-status { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #6b7280; }
+    .footer-dot { width: 6px; height: 6px; border-radius: 50%; background: #29afd4; }
+    .footer-date { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: #9ca3af; }
+    @media print {
+      body { background: white; padding: 0; }
+      .envelope { box-shadow: none; border: 1px solid #c5cfe8; width: 100%; }
+      @page { size: A4 landscape; margin: 15mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="envelope">
+    <div class="corner"></div>
+    <div class="header">
+      <div class="header-logo">
+        <div class="header-logo-dot">✉</div>
+        КорпПочта
+      </div>
+      <div class="header-track">${env.trackingCode || "—"}</div>
+    </div>
+    <div class="body">
+      <div class="addresses">
+        <div class="addr-from">
+          <div class="addr-label">От кого</div>
+          <div class="addr-name">${env.senderName || "—"}</div>
+          <div class="addr-line">${env.senderAddress || ""}</div>
+          <div class="addr-line">${[env.senderCity, env.senderIndex].filter(Boolean).join(", ")}</div>
+        </div>
+        <hr class="divider"/>
+        <div class="addr-to">
+          <div class="addr-label">Кому</div>
+          <div class="addr-name">${env.recipientName || "—"}</div>
+          <div class="addr-line">${env.recipientAddress || ""}</div>
+          <div class="addr-line">${[env.recipientCity, env.recipientIndex].filter(Boolean).join(", ")}</div>
+        </div>
+      </div>
+      <div class="qr-block">
+        <img src="${qrDataUrl}" alt="QR-код"/>
+        <div class="qr-hint">Сканируйте для получения информации об отправлении</div>
+        <div class="meta">
+          <div class="badge">${env.type || ""}</div>
+          <div class="meta-line">Вес: ${env.weight || "—"} кг</div>
+          <div class="meta-line">${date}</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <div class="footer-status"><div class="footer-dot"></div> Готов к отправке</div>
+      <div class="footer-date">${date}</div>
+    </div>
+  </div>
+  <script>window.onload = () => { window.print(); }
+</body>
+</html>`;
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
   const handleSave = () => {
     if (!form.senderName || !form.recipientName) {
       showToast("Укажите ФИО отправителя и получателя");
@@ -699,9 +805,20 @@ export default function Index() {
               </div>
 
               <div>
-                <h2 className="text-base font-semibold mb-4" style={{ color: "hsl(220,30%,12%)" }}>
-                  Предпросмотр конверта
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-semibold" style={{ color: "hsl(220,30%,12%)" }}>
+                    Предпросмотр конверта
+                  </h2>
+                  <button
+                    onClick={() => handlePrint(form)}
+                    disabled={!form.senderName || !form.recipientName}
+                    className="flex items-center gap-2 px-4 py-2 rounded-sm text-sm font-semibold text-white transition-all hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{ background: "hsl(218,65%,22%)" }}
+                  >
+                    <Icon name="Printer" size={14} color="white" />
+                    Распечатать конверт
+                  </button>
+                </div>
                 <EnvelopePreview env={form} />
                 <div
                   className="mt-4 p-4 rounded-sm text-sm"
