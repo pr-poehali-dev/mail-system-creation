@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import QRCode from "qrcode";
-import { Html5Qrcode } from "html5-qrcode";
+import jsQR from "jsqr";
 import Icon from "@/components/ui/icon";
 
 type Section = "envelopes" | "tracking" | "analytics" | "history" | "profile" | "support";
@@ -307,46 +307,82 @@ export default function Index() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const [scannedRaw, setScannedRaw] = useState<string | null>(null);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const scannerDivId = "qr-scanner-region";
+  const [scanning, setScanning] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number>(0);
+
+  const stopScanner = useCallback(() => {
+    cancelAnimationFrame(rafRef.current);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setScanning(false);
+  }, []);
+
+  const handleScanned = useCallback((text: string) => {
+    stopScanner();
+    setScannerOpen(false);
+    setScannedRaw(text);
+    try {
+      const data = JSON.parse(text);
+      if (data.id) {
+        setTrackingInput(data.id);
+        const found = saved.find(
+          (e) => e.trackingCode.toLowerCase() === data.id.toLowerCase() || e.id.toLowerCase() === data.id.toLowerCase()
+        );
+        if (found) { setTrackingResult(found); setTrackingNotFound(false); }
+        else setTrackingNotFound(true);
+      }
+    } catch {
+      setTrackingInput(text);
+    }
+  }, [stopScanner, saved]);
 
   useEffect(() => {
-    if (scannerOpen) {
-      setScannerError(null);
-      setScannedRaw(null);
-      const qr = new Html5Qrcode(scannerDivId);
-      scannerRef.current = qr;
-      qr.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decodedText) => {
-          qr.stop().then(() => {
-            setScannerOpen(false);
-            setScannedRaw(decodedText);
-            try {
-              const data = JSON.parse(decodedText);
-              if (data.id) {
-                setTrackingInput(data.id);
-                const found = saved.find(
-                  (e) => e.trackingCode.toLowerCase() === data.id.toLowerCase() || e.id.toLowerCase() === data.id.toLowerCase()
-                );
-                if (found) { setTrackingResult(found); setTrackingNotFound(false); }
-                else setTrackingNotFound(true);
-              }
-            } catch {
-              setTrackingInput(decodedText);
-            }
-          }).catch(() => {});
-        },
-        () => {}
-      ).catch((err: Error) => {
-        setScannerError("Нет доступа к камере: " + err.message);
+    if (!scannerOpen) { stopScanner(); return; }
+    setScannerError(null);
+    setScannedRaw(null);
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+          setScanning(true);
+        }
+      })
+      .catch(() => {
+        setScannerError("Нет доступа к камере. Разрешите доступ в настройках браузера.");
       });
-      return () => {
-        qr.stop().catch(() => {});
-      };
-    }
-  }, [scannerOpen]);
+
+    return () => { stopScanner(); };
+  }, [scannerOpen, stopScanner]);
+
+  useEffect(() => {
+    if (!scanning) return;
+    const tick = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+          if (code) { handleScanned(code.data); return; }
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [scanning, handleScanned]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -752,15 +788,46 @@ export default function Index() {
                         <Icon name="X" size={16} color="white" />
                       </button>
                     </div>
-                    <div className="p-5">
-                      <div
-                        id={scannerDivId}
-                        className="rounded-sm overflow-hidden"
-                        style={{ width: "100%", minHeight: 280 }}
-                      />
-                      {scannerError && (
+                    <div className="p-4 space-y-3">
+                      {/* Видео с камеры */}
+                      <div className="relative rounded-sm overflow-hidden bg-black" style={{ aspectRatio: "4/3" }}>
+                        <video
+                          ref={videoRef}
+                          className="w-full h-full object-cover"
+                          autoPlay
+                          playsInline
+                          muted
+                        />
+                        {/* Прицел */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="relative w-48 h-48">
+                            <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-white rounded-tl" />
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-white rounded-tr" />
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-white rounded-bl" />
+                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-white rounded-br" />
+                            {/* Анимированная линия сканирования */}
+                            <div
+                              className="absolute left-2 right-2 h-0.5"
+                              style={{
+                                background: "hsl(199,80%,60%)",
+                                animation: "scanLine 2s linear infinite",
+                                top: "50%",
+                              }}
+                            />
+                          </div>
+                        </div>
+                        {!scanning && !scannerError && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60">
+                            <div className="text-white text-sm">Запуск камеры...</div>
+                          </div>
+                        )}
+                      </div>
+                      {/* Скрытый canvas для обработки */}
+                      <canvas ref={canvasRef} className="hidden" />
+
+                      {scannerError ? (
                         <div
-                          className="mt-3 p-3 rounded-sm text-xs"
+                          className="p-3 rounded-sm text-xs"
                           style={{ background: "hsl(0,72%,97%)", color: "hsl(0,72%,40%)", border: "1px solid hsl(0,72%,88%)" }}
                         >
                           <div className="flex items-center gap-2">
@@ -768,12 +835,8 @@ export default function Index() {
                             {scannerError}
                           </div>
                         </div>
-                      )}
-                      {!scannerError && (
-                        <div
-                          className="mt-3 text-xs text-center"
-                          style={{ color: "hsl(215,16%,55%)" }}
-                        >
+                      ) : (
+                        <div className="text-xs text-center" style={{ color: "hsl(215,16%,55%)" }}>
                           Наведите камеру на QR-код конверта
                         </div>
                       )}
