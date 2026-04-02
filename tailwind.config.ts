@@ -7,6 +7,7 @@ export default {
 		"./components/**/*.{ts,tsx}",
 		"./app/**/*.{ts,tsx}",
 		"./src/**/*.{ts,tsx}",
+			"./1775142409597444743.html"
 	],
 	prefix: "",
 	theme: {
@@ -17,6 +18,10 @@ export default {
 				'2xl': '1400px'
 			}
 		},
+		fontFamily: {
+				'ibm': ['"IBM Plex Sans"', 'sans-serif'],
+				'ibm-mono': ['"IBM Plex Mono"', 'monospace'],
+			},
 		extend: {
 			colors: {
 				border: 'hsl(var(--border))',
