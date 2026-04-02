@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 import Icon from "@/components/ui/icon";
 
 type Section = "envelopes" | "tracking" | "analytics" | "history" | "profile" | "support";
@@ -303,6 +304,49 @@ export default function Index() {
   const [trackingInput, setTrackingInput] = useState("");
   const [trackingResult, setTrackingResult] = useState<EnvelopeData | null>(null);
   const [trackingNotFound, setTrackingNotFound] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const [scannedRaw, setScannedRaw] = useState<string | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerDivId = "qr-scanner-region";
+
+  useEffect(() => {
+    if (scannerOpen) {
+      setScannerError(null);
+      setScannedRaw(null);
+      const qr = new Html5Qrcode(scannerDivId);
+      scannerRef.current = qr;
+      qr.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          qr.stop().then(() => {
+            setScannerOpen(false);
+            setScannedRaw(decodedText);
+            try {
+              const data = JSON.parse(decodedText);
+              if (data.id) {
+                setTrackingInput(data.id);
+                const found = saved.find(
+                  (e) => e.trackingCode.toLowerCase() === data.id.toLowerCase() || e.id.toLowerCase() === data.id.toLowerCase()
+                );
+                if (found) { setTrackingResult(found); setTrackingNotFound(false); }
+                else setTrackingNotFound(true);
+              }
+            } catch {
+              setTrackingInput(decodedText);
+            }
+          }).catch(() => {});
+        },
+        () => {}
+      ).catch((err: Error) => {
+        setScannerError("Нет доступа к камере: " + err.message);
+      });
+      return () => {
+        qr.stop().catch(() => {});
+      };
+    }
+  }, [scannerOpen]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -654,7 +698,7 @@ export default function Index() {
                 style={{ borderColor: "hsl(214,20%,85%)" }}
               >
                 <label className="text-xs font-semibold uppercase tracking-widest block" style={{ color: "hsl(215,16%,47%)" }}>
-                  Введите трекинг-код или ID конверта
+                  Введите трекинг-код или отсканируйте QR
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -665,6 +709,14 @@ export default function Index() {
                     onChange={(e) => setTrackingInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleTrack()}
                   />
+                  <button
+                    onClick={() => { setScannerOpen(true); setTrackingResult(null); setTrackingNotFound(false); }}
+                    className="px-3 py-2.5 rounded-sm text-sm font-semibold text-white flex items-center gap-2"
+                    style={{ background: "hsl(199,80%,48%)" }}
+                    title="Сканировать QR-код"
+                  >
+                    <Icon name="ScanLine" size={16} color="white" />
+                  </button>
                   <button
                     onClick={handleTrack}
                     className="px-5 py-2.5 rounded-sm text-sm font-semibold text-white"
@@ -677,6 +729,77 @@ export default function Index() {
                   Попробуйте: <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: "hsl(218,65%,40%)" }}>ENV-2026-001-MSK-SPB</span>
                 </div>
               </div>
+
+              {/* QR Scanner */}
+              {scannerOpen && (
+                <div className="mt-4 animate-slide-up">
+                  <div
+                    className="rounded-sm border bg-white overflow-hidden"
+                    style={{ borderColor: "hsl(199,80%,72%)" }}
+                  >
+                    <div
+                      className="px-5 py-3 flex items-center justify-between"
+                      style={{ background: "hsl(218,65%,18%)" }}
+                    >
+                      <div className="flex items-center gap-2 text-white text-sm font-semibold">
+                        <Icon name="ScanLine" size={16} color="white" />
+                        Сканер QR-кода
+                      </div>
+                      <button
+                        onClick={() => setScannerOpen(false)}
+                        className="text-white opacity-60 hover:opacity-100 transition-opacity"
+                      >
+                        <Icon name="X" size={16} color="white" />
+                      </button>
+                    </div>
+                    <div className="p-5">
+                      <div
+                        id={scannerDivId}
+                        className="rounded-sm overflow-hidden"
+                        style={{ width: "100%", minHeight: 280 }}
+                      />
+                      {scannerError && (
+                        <div
+                          className="mt-3 p-3 rounded-sm text-xs"
+                          style={{ background: "hsl(0,72%,97%)", color: "hsl(0,72%,40%)", border: "1px solid hsl(0,72%,88%)" }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon name="AlertCircle" size={13} color="hsl(0,72%,50%)" />
+                            {scannerError}
+                          </div>
+                        </div>
+                      )}
+                      {!scannerError && (
+                        <div
+                          className="mt-3 text-xs text-center"
+                          style={{ color: "hsl(215,16%,55%)" }}
+                        >
+                          Наведите камеру на QR-код конверта
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Scanned raw data (if not parsed as envelope) */}
+              {scannedRaw && !trackingResult && !trackingNotFound && (
+                <div
+                  className="mt-4 p-4 rounded-sm text-sm animate-slide-up"
+                  style={{ background: "hsl(199,80%,97%)", border: "1px solid hsl(199,80%,85%)", color: "hsl(199,80%,30%)" }}
+                >
+                  <div className="flex items-center gap-2 font-medium mb-2">
+                    <Icon name="CheckCircle" size={14} color="hsl(199,80%,48%)" />
+                    QR отсканирован
+                  </div>
+                  <pre className="text-xs whitespace-pre-wrap break-all" style={{ fontFamily: "'IBM Plex Mono', monospace", color: "hsl(218,65%,28%)" }}>
+                    {(() => {
+                      try { return JSON.stringify(JSON.parse(scannedRaw), null, 2); }
+                      catch { return scannedRaw; }
+                    })()}
+                  </pre>
+                </div>
+              )}
 
               {trackingNotFound && (
                 <div
